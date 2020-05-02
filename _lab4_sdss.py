@@ -65,6 +65,7 @@ broadcaster = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 
 def send_broadcast_thread():
+    print_red("send_broadcast_thread started!")
     node_uuid = get_node_uuid()
     while True:
         # TODO: write logic for sending broadcasts.
@@ -77,6 +78,7 @@ def receive_broadcast_thread():
     launches a thread to connect to new nodes
     and exchange timestamps.
     """
+    print_blue("recieve_broadcast_thread started!")
     while True:
         # TODO: write logic for receiving broadcasts.
         data, (ip, port) = broadcaster.recvfrom(4096)
@@ -88,6 +90,7 @@ def tcp_server_thread():
     Accept connections from other nodes and send them
     this node's timestamp once they connect.
     """
+    print_green("tcp_server_thread started!")
     pass
 
 
@@ -112,6 +115,16 @@ def daemon_thread_builder(target, args=()) -> threading.Thread:
 
 
 def entrypoint():
+    # starting tcp server
+    daemon_thread_builder(tcp_server_thread).start()
+    
+    # starting sending and receiving broadcast messages
+    daemon_thread_builder(send_broadcast_thread).start()
+    daemon_thread_builder(receive_broadcast_thread).start()
+
+    # I think we need this here (otherwise the program will terminate and the threads gonna die)
+    while True: pass
+
     pass
 
 ############################################

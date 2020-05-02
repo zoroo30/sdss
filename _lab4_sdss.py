@@ -59,16 +59,29 @@ neighbor_information = {}
 # Leave the server socket as global variable.
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
+# Setup the server socket
+server.bind(('', 0))
+
+
 # Leave broadcaster as a global variable.
 broadcaster = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-# Setup the UDP socket
 
+# Setup the UDP socket
+broadcaster.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+broadcaster.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+broadcaster.bind(('', get_broadcast_port()))
+broadcaster.connect(('', get_broadcast_port()))
 
 def send_broadcast_thread():
     print_red("send_broadcast_thread started!")
     node_uuid = get_node_uuid()
+    tcp_server_port = server.getsockname()[1]
+    message = str(node_uuid) + ' ON ' + str(tcp_server_port)
+    message = message.encode('utf-8')
+
     while True:
         # TODO: write logic for sending broadcasts.
+        broadcaster.send(message)
         time.sleep(1)   # Leave as is.
 
 
@@ -82,7 +95,9 @@ def receive_broadcast_thread():
     while True:
         # TODO: write logic for receiving broadcasts.
         data, (ip, port) = broadcaster.recvfrom(4096)
-        print_blue(f"RECV: {data} FROM: {ip}:{port}")
+        data = data.decode('utf-8').split(' ON ')
+        if data[0] != get_node_uuid():
+            print_blue(f"RECV: {data} FROM: {ip}:{port}")
 
 
 def tcp_server_thread():

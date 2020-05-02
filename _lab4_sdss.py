@@ -40,7 +40,7 @@ def get_node_uuid():
 
 
 class NeighborInfo(object):
-    def __init__(self, delay, broadcast_count, ip=None, tcp_port=None):
+    def __init__(self, delay, broadcast_count=0, ip=None, tcp_port=None):
         # Ip and port are optional, if you want to store them.
         self.delay = delay
         self.broadcast_count = broadcast_count
@@ -102,9 +102,24 @@ def receive_broadcast_thread():
         data, (ip, port) = broadcaster.recvfrom(4096)
         data = data.decode('utf-8').split(' ON ')
 
-        # if 
-        if data[0] != get_node_uuid():
-            print_blue(f"RECV: {data} FROM: {ip}:{port}")
+        # Ignore broadcast messages sent by me
+        if data[0] == get_node_uuid(): continue
+
+        print_blue(f"RECV: {data} FROM: {ip}:{port}")
+        
+        # If node is not in neighbor_information create it
+        if data[0] not in neighbor_information:
+            neighbor_information[data[0]] = NeighborInfo(0, 0, ip, data[1])
+
+        # If broadcast_count % 10 != 0 : update it and continue
+        if neighbor_information[data[0]].broadcast_count % 10 != 0:
+            neighbor_information[data[0]].broadcast_count += 1
+            continue
+        
+        # Update broadcast_count and start exhange_timestamps_thread
+        neighbor_information[data[0]].broadcast_count = (neighbor_information[data[0]].broadcast_count + 1) % 10
+        daemon_thread_builder(exchange_timestamps_thread, (data[0], ip, data[1])).start()
+
 
 
 def tcp_server_thread():
@@ -112,7 +127,6 @@ def tcp_server_thread():
     Accept connections from other nodes and send them
     this node's timestamp once they connect.
     """
-    print_green("tcp_server_thread started!")
     pass
 
 

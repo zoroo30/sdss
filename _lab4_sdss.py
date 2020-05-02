@@ -40,10 +40,10 @@ def get_node_uuid():
 
 
 class NeighborInfo(object):
-    def __init__(self, delay, last_timestamp, ip=None, tcp_port=None):
+    def __init__(self, delay, broadcast_count, ip=None, tcp_port=None):
         # Ip and port are optional, if you want to store them.
         self.delay = delay
-        self.last_timestamp = last_timestamp
+        self.broadcast_count = broadcast_count
         self.ip = ip
         self.tcp_port = tcp_port
 
@@ -56,6 +56,8 @@ class NeighborInfo(object):
 # Don't change any variable's name.
 # Use this hashmap to store the information of your neighbor nodes.
 neighbor_information = {}
+
+
 # Leave the server socket as global variable.
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -67,22 +69,26 @@ server.bind(('', 0))
 broadcaster = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 # Setup the UDP socket
-broadcaster.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-broadcaster.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-broadcaster.bind(('', get_broadcast_port()))
-broadcaster.connect(('', get_broadcast_port()))
+broadcaster.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)   # Enabling reusing the port
+broadcaster.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)   # Enabling broadcasting mode
+broadcaster.bind(('', get_broadcast_port()))                        # To listen to the broadcasting port
+broadcaster.connect(('', get_broadcast_port()))                     # To send to the broadcasting port
 
 def send_broadcast_thread():
-    print_red("send_broadcast_thread started!")
+    # get node uuid
     node_uuid = get_node_uuid()
+
+    # get node tcp server port number
     tcp_server_port = server.getsockname()[1]
-    message = str(node_uuid) + ' ON ' + str(tcp_server_port)
+
+    # creating the message
+    message = '{} ON {}'.format(node_uuid, tcp_server_port)
     message = message.encode('utf-8')
 
+    # broadcasting the message every second
     while True:
-        # TODO: write logic for sending broadcasts.
         broadcaster.send(message)
-        time.sleep(1)   # Leave as is.
+        time.sleep(1)
 
 
 def receive_broadcast_thread():
@@ -91,11 +97,12 @@ def receive_broadcast_thread():
     launches a thread to connect to new nodes
     and exchange timestamps.
     """
-    print_blue("recieve_broadcast_thread started!")
     while True:
-        # TODO: write logic for receiving broadcasts.
+        # Recieve and decode a message
         data, (ip, port) = broadcaster.recvfrom(4096)
         data = data.decode('utf-8').split(' ON ')
+
+        # if 
         if data[0] != get_node_uuid():
             print_blue(f"RECV: {data} FROM: {ip}:{port}")
 

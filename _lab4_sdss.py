@@ -2,10 +2,11 @@ import sys
 import os
 import threading
 import socket
-import time
 import uuid
 import struct
-# https://bluesock.org/~willkg/dev/ansi.html
+import time
+from datetime import datetime
+
 ANSI_RESET = "\u001B[0m"
 ANSI_RED = "\u001B[31m"
 ANSI_GREEN = "\u001B[32m"
@@ -48,31 +49,33 @@ class NeighborInfo(object):
         self.tcp_port = tcp_port
 
 
-############################################
-#######  Y  O  U  R     C  O  D  E  ########
-############################################
+##################
+# YOUR     CODE  #
+##################
 
 
 # Don't change any variable's name.
 # Use this hashmap to store the information of your neighbor nodes.
 neighbor_information = {}
 
-
 # Leave the server socket as global variable.
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 # Setup the server socket
 server.bind(('', 0))
-
+server.listen(20)
 
 # Leave broadcaster as a global variable.
 broadcaster = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 # Setup the UDP socket
-broadcaster.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)   # Enabling reusing the port
-broadcaster.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)   # Enabling broadcasting mode
-broadcaster.bind(('', get_broadcast_port()))                        # To listen to the broadcasting port
-broadcaster.connect(('', get_broadcast_port()))                     # To send to the broadcasting port
+broadcaster.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)  # Enabling reusing the port
+broadcaster.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)  # Enabling broadcasting mode
+broadcaster.bind(('', get_broadcast_port()))  # To listen to the broadcasting port
+
+
+# (('', get_broadcast_port()))  # To send to the broadcasting port
+
 
 def send_broadcast_thread():
     # get node uuid
@@ -87,7 +90,8 @@ def send_broadcast_thread():
 
     # broadcasting the message every second
     while True:
-        broadcaster.send(message)
+        broadcaster.sendto(message, ("255.255.255.255", get_broadcast_port()))
+        # broadcaster.send(message)
         time.sleep(1)
 
 
@@ -98,15 +102,16 @@ def receive_broadcast_thread():
     and exchange timestamps.
     """
     while True:
-        # Recieve and decode a message
+        # Receive and decode a message
         data, (ip, port) = broadcaster.recvfrom(4096)
         data = data.decode('utf-8').split(' ON ')
 
         # Ignore broadcast messages sent by me
-        if data[0] == get_node_uuid(): continue
+        if data[0] == get_node_uuid():
+            continue
 
         print_blue(f"RECV: {data} FROM: {ip}:{port}")
-        
+
         # If node is not in neighbor_information create it
         if data[0] not in neighbor_information:
             neighbor_information[data[0]] = NeighborInfo(0, 0, ip, data[1])
@@ -115,11 +120,10 @@ def receive_broadcast_thread():
         if neighbor_information[data[0]].broadcast_count % 10 != 0:
             neighbor_information[data[0]].broadcast_count += 1
             continue
-        
-        # Update broadcast_count and start exhange_timestamps_thread
+
+        # Update broadcast_count and start exchange_timestamps_thread
         neighbor_information[data[0]].broadcast_count = (neighbor_information[data[0]].broadcast_count + 1) % 10
         daemon_thread_builder(exchange_timestamps_thread, (data[0], ip, data[1])).start()
-
 
 
 def tcp_server_thread():
@@ -127,18 +131,36 @@ def tcp_server_thread():
     Accept connections from other nodes and send them
     this node's timestamp once they connect.
     """
-    pass
+    while True:
+        neighbor_socket, neighbor_address = server.accept()
+
+        ts = datetime.utcnow().timestamp()
+        neighbor_socket.sendto(struct.pack("d", ts), neighbor_address)
+        neighbor_socket.close()
 
 
 def exchange_timestamps_thread(other_uuid: str, other_ip: str, other_tcp_port: int):
     """
     Open a connection to the other_ip, other_tcp_port
     and do the steps to exchange timestamps.
-
     Then update the neighbor_info map using other node's UUID.
     """
+    temp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    temp_socket.connect((other_ip, int(other_tcp_port)))
+
     print_yellow(f"ATTEMPTING TO CONNECT TO {other_uuid}")
-    pass
+
+    my_ts = datetime.utcnow().timestamp()
+    data = temp_socket.recv(4096)
+    other_ts = struct.unpack('d', data)[0]
+
+    delay = abs(other_ts - my_ts)
+
+    neighbor_information[other_uuid].delay = delay
+
+    print_green(f"{other_uuid} DELAY: {str(delay)} SEC")
+
+    temp_socket.close()
 
 
 def daemon_thread_builder(target, args=()) -> threading.Thread:
@@ -153,15 +175,18 @@ def daemon_thread_builder(target, args=()) -> threading.Thread:
 def entrypoint():
     # starting tcp server
     daemon_thread_builder(tcp_server_thread).start()
-    
+
     # starting sending and receiving broadcast messages
     daemon_thread_builder(send_broadcast_thread).start()
+
     daemon_thread_builder(receive_broadcast_thread).start()
 
     # I think we need this here (otherwise the program will terminate and the threads gonna die)
-    while True: pass
+    while True:
+        pass
 
     pass
+
 
 ############################################
 ############################################
@@ -176,7 +201,7 @@ def main():
     print_red("If the program blocks/throws, you have to terminate it manually.")
     print_green(f"NODE UUID: {get_node_uuid()}")
     print("*" * 50)
-    time.sleep(2)   # Wait a little bit.
+    time.sleep(2)  # Wait a little bit.
     entrypoint()
 
 

@@ -74,9 +74,6 @@ broadcaster.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)  # Enabling br
 broadcaster.bind(('', get_broadcast_port()))  # To listen to the broadcasting port
 
 
-# (('', get_broadcast_port()))  # To send to the broadcasting port
-
-
 def send_broadcast_thread():
     # get node uuid
     node_uuid = get_node_uuid()
@@ -91,7 +88,6 @@ def send_broadcast_thread():
     # broadcasting the message every second
     while True:
         broadcaster.sendto(message, ("255.255.255.255", get_broadcast_port()))
-        # broadcaster.send(message)
         time.sleep(1)
 
 
